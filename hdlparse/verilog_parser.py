@@ -32,6 +32,7 @@ verilog_tokens = {
   'module_port': [
     (r'\s*(input|inout|output)\s*(reg|supply0|supply1|tri|triand|trior|tri0|tri1|wire|wand|wor)?\s*(signed)?\s*(\[[^]]+\])?', 'module_port_start'),
     (r'\s*(\w+)\s*,?', 'port_param'),
+    (r'\s*//\s*(external)\s*(single-cycle|strobe|we-strobe|plus-we)?.*\n', 'port_annotation'),
     (r'[);]', None, '#pop'),
     (r'//#\s*{{(.*)}}\n', 'section_meta'),
     (r'//.*\n', None),
@@ -54,18 +55,20 @@ class VerilogObject(object):
 
 class VerilogParameter(object):
   '''Parameter and port to a module'''
-  def __init__(self, name, mode=None, data_type=None, default_value=None, desc=None):
+  def __init__(self, name, mode=None, data_type=None, default_value=None, desc=None,
+               annotations=None):
     self.name = name
     self.mode = mode
     self.data_type = data_type
     self.default_value = default_value
     self.desc = desc
+    self.annotations = annotations
 
   def __str__(self):
     if self.mode is not None:
-      param = '{} : {} {}'.format(self.name, self.mode, self.data_type)
+      param = '{} : {} {} {}'.format(self.name, self.mode, self.data_type, self.annotations)
     else:
-      param = '{} : {}'.format(self.name, self.data_type)
+      param = '{} : {} {}'.format(self.name, self.data_type, self.annotations)
     if self.default_value is not None:
       param = '{} := {}'.format(param, self.default_value)
     return param
@@ -118,6 +121,7 @@ def parse_verilog(text):
   metacomments = []
   parameters = []
   param_items = []
+  annotations = []
 
   generics = []
   ports = collections.OrderedDict()
@@ -144,6 +148,7 @@ def parse_verilog(text):
       generics = []
       ports = collections.OrderedDict()
       param_items = []
+      annotations = []
       sections = []
       port_param_index = 0
 
@@ -177,9 +182,10 @@ def parse_verilog(text):
 
       # Complete pending items
       for i in param_items:
-        ports[i] = VerilogParameter(i, mode, ptype)
+        ports[i] = VerilogParameter(i, mode, ptype, annotations=annotations)
 
       param_items = []
+      annotations = []
       if len(ports) > 0:
         last_item = next(reversed(ports))
 
@@ -192,6 +198,9 @@ def parse_verilog(text):
 
       param_items.append(ident)
       port_param_index += 1
+
+    elif action == 'port_annotation':
+      annotations.extend(filter(lambda g: g is not None, groups))
 
     elif action == 'end_module':
       # Finish any pending ports
