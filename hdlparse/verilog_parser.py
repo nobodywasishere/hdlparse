@@ -205,7 +205,7 @@ def parse_verilog(text):
     elif action == 'end_module':
       # Finish any pending ports
       for i in param_items:
-        ports[i] = VerilogParameter(i, mode, ptype)
+        ports[i] = VerilogParameter(i, mode, ptype, annotations=annotations)
 
       vobj = VerilogModule(name, ports.values(), generics, dict(sections), metacomments)
       objects.append(vobj)
