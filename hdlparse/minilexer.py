@@ -14,7 +14,7 @@ class MiniLexer(object):
 
   def __init__(self, tokens, flags=re.MULTILINE):
     '''Create a new lexer
-    
+
     Args:
       tokens (dict(match rules)): Hierarchical dict of states with a list of regex patterns and transitions
       flags (int): Optional regex flags
