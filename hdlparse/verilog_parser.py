@@ -72,7 +72,7 @@ class VerilogParameter(object):
     if self.default_value is not None:
       param = '{} := {}'.format(param, self.default_value)
     return param
-      
+
   def __repr__(self):
     return "VerilogParameter('{}')".format(self.name)
 
@@ -92,7 +92,7 @@ class VerilogModule(VerilogObject):
 
 def parse_verilog_file(fname):
   '''Parse a named Verilog file
-  
+
   Args:
     fname (str): File to parse.
   Returns:
@@ -217,7 +217,7 @@ def parse_verilog(text):
 
 def is_verilog(fname):
   '''Identify file as Verilog by its extension
-  
+
   Args:
     fname (str): File name to check
   Returns:
@@ -274,7 +274,7 @@ class VerilogExtractor(object):
 
   def is_array(self, data_type):
     '''Check if a type is an array type
-    
+
     Args:
       data_type (str): Data type
     Returns:
