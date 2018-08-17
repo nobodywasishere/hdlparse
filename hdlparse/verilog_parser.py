@@ -56,10 +56,13 @@ class VerilogObject(object):
 class VerilogParameter(object):
   '''Parameter and port to a module'''
   def __init__(self, name, mode=None, data_type=None, default_value=None, desc=None,
-               annotations=None):
+               range='', size=1, sign='', annotations=None):
     self.name = name
     self.mode = mode
     self.data_type = data_type
+    self.range = range
+    self.size = size
+    self.sign = sign
     self.default_value = default_value
     self.desc = desc
     self.annotations = annotations
@@ -89,6 +92,13 @@ class VerilogModule(VerilogObject):
     return "VerilogModule('{}') {}".format(self.name, self.ports)
 
 
+def range_width(r):
+    '''
+    A utility function: string [a:b] => integer a-b+1
+    '''
+    r2 = re.sub('\]', '', re.sub('\[', '', r))
+    nums = r2.split(':')
+    return int(nums[0]) - int(nums[1]) + 1
 
 def parse_verilog_file(fname):
   '''Parse a named Verilog file
@@ -117,6 +127,9 @@ def parse_verilog(text):
   saved_type = None
   mode = 'input'
   ptype = 'wire'
+  range = ''
+  size = 1
+  sign = ''
 
   metacomments = []
   parameters = []
@@ -156,33 +169,43 @@ def parse_verilog(text):
       net_type, vec_range = groups
 
       new_ptype = ''
+      new_range = ''
+      new_size = 1
       if net_type is not None:
-        new_ptype += net_type
+        new_ptype = net_type
 
       if vec_range is not None:
-        new_ptype += ' ' + vec_range
+        new_range = vec_range
+        new_size = range_width(new_range)
 
       ptype = new_ptype
+      range = new_range
+      size = new_size
 
     elif action == 'param_item':
-      generics.append(VerilogParameter(groups[0], 'in', ptype))
+      generics.append(VerilogParameter(groups[0], 'in', ptype, range=range, size=size))
 
     elif action == 'module_port_start':
       new_mode, net_type, signed, vec_range = groups
 
       new_ptype = ''
+      new_range = ''
+      new_size = 1
+      new_sign = ''
       if net_type is not None:
-        new_ptype += net_type
+        new_ptype = net_type
 
       if signed is not None:
-        new_ptype += ' ' + signed
+        new_sign = signed
 
       if vec_range is not None:
-        new_ptype += ' ' + vec_range
+        new_range = vec_range
+        new_size = range_width(new_range)
 
       # Complete pending items
       for i in param_items:
-        ports[i] = VerilogParameter(i, mode, ptype, annotations=annotations)
+        ports[i] = VerilogParameter(i, mode, ptype, range=range, size=size,
+                                    sign=sign, annotations=annotations)
 
       param_items = []
       annotations = []
@@ -192,6 +215,9 @@ def parse_verilog(text):
       # Start with new mode
       mode = new_mode
       ptype = new_ptype
+      range = new_range
+      size = new_size
+      sign = new_sign
 
     elif action == 'port_param':
       ident = groups[0]
@@ -205,7 +231,8 @@ def parse_verilog(text):
     elif action == 'end_module':
       # Finish any pending ports
       for i in param_items:
-        ports[i] = VerilogParameter(i, mode, ptype, annotations=annotations)
+        ports[i] = VerilogParameter(i, mode, ptype, range=range, size=size,
+                                    sign=sign, annotations=annotations)
 
       vobj = VerilogModule(name, ports.values(), generics, dict(sections), metacomments)
       objects.append(vobj)
