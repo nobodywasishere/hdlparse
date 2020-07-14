@@ -35,6 +35,8 @@ verilog_tokens = {
   'module_port': [
     (r'\s*(input|inout|output)\s+(?:(reg|supply0|supply1|tri|triand|trior|tri0|tri1|wire|wand|wor|logic)\s+)?(signed)?\s*(\[[^]]+\])?', 'module_port_start'),
     (r'\s*(\w+)\s*,?', 'port_param'),
+    (r'\s*\`(\w+)\s*,?', None, '#pop'),
+    (r'\s*//\s*(external)\s*?(single-cycle|strobe|we-strobe|plus-we)?.*?\n', 'port_annotation'),
     (r'[);]', None, '#pop'),
     (r'//#\s*{{(.*)}}\n', 'section_meta'),
     (r'//.*\n', None),
@@ -57,18 +59,23 @@ class VerilogObject(object):
 
 class VerilogParameter(object):
   '''Parameter and port to a module'''
-  def __init__(self, name, mode=None, data_type=None, default_value=None, desc=None):
+  def __init__(self, name, mode=None, data_type=None, default_value=None, desc=None,
+               range='', size=1, sign='', annotations=None):
     self.name = name
     self.mode = mode
     self.data_type = data_type
+    self.range = range
+    self.size = size
+    self.sign = sign
     self.default_value = default_value
     self.desc = desc
+    self.annotations = annotations
 
   def __str__(self):
     if self.mode is not None:
-      param = '{} : {} {}'.format(self.name, self.mode, self.data_type)
+      param = '{} : {} {} {}'.format(self.name, self.mode, self.data_type, self.annotations)
     else:
-      param = '{} : {}'.format(self.name, self.data_type)
+      param = '{} : {} {}'.format(self.name, self.data_type, self.annotations)
     if self.default_value is not None:
       param = '{} := {}'.format(param, self.default_value)
     return param
@@ -89,6 +96,13 @@ class VerilogModule(VerilogObject):
     return "VerilogModule('{}') {}".format(self.name, self.ports)
 
 
+def range_width(r):
+    '''
+    A utility function: string [a:b] => integer a-b+1
+    '''
+    r2 = re.sub('\]', '', re.sub('\[', '', r))
+    nums = r2.split(':')
+    return int(nums[0]) - int(nums[1]) + 1
 
 def parse_verilog_file(fname):
   '''Parse a named Verilog file
@@ -117,10 +131,14 @@ def parse_verilog(text):
   saved_type = None
   mode = 'input'
   ptype = 'wire'
+  range = ''
+  size = 1
+  sign = ''
 
   metacomments = []
   parameters = []
   param_items = []
+  annotations = []
 
   generics = []
   ports = collections.OrderedDict()
@@ -147,6 +165,7 @@ def parse_verilog(text):
       generics = []
       ports = collections.OrderedDict()
       param_items = []
+      annotations = []
       sections = []
       port_param_index = 0
 
@@ -154,41 +173,55 @@ def parse_verilog(text):
       net_type, vec_range = groups
 
       new_ptype = ''
+      new_range = ''
+      new_size = 1
       if net_type is not None:
-        new_ptype += net_type
+        new_ptype = net_type
 
       if vec_range is not None:
-        new_ptype += ' ' + vec_range
+        new_range = vec_range
+        new_size = range_width(new_range)
 
       ptype = new_ptype
+      range = new_range
+      size = new_size
 
     elif action == 'param_item':
-      generics.append(VerilogParameter(groups[0], 'in', ptype))
+      generics.append(VerilogParameter(groups[0], 'in', ptype, range=range, size=size))
 
     elif action == 'module_port_start':
       new_mode, net_type, signed, vec_range = groups
 
       new_ptype = ''
+      new_range = ''
+      new_size = 1
+      new_sign = ''
       if net_type is not None:
-        new_ptype += net_type
+        new_ptype = net_type
 
       if signed is not None:
-        new_ptype += ' ' + signed
+        new_sign = signed
 
       if vec_range is not None:
-        new_ptype += ' ' + vec_range
+        new_range = vec_range
+        new_size = range_width(new_range)
 
       # Complete pending items
       for i in param_items:
-        ports[i] = VerilogParameter(i, mode, ptype)
+        ports[i] = VerilogParameter(i, mode, ptype, range=range, size=size,
+                                    sign=sign, annotations=annotations)
 
       param_items = []
+      annotations = []
       if len(ports) > 0:
         last_item = next(reversed(ports))
 
       # Start with new mode
       mode = new_mode
       ptype = new_ptype
+      range = new_range
+      size = new_size
+      sign = new_sign
 
     elif action == 'port_param':
       ident = groups[0]
@@ -196,10 +229,14 @@ def parse_verilog(text):
       param_items.append(ident)
       port_param_index += 1
 
+    elif action == 'port_annotation':
+      annotations.extend(filter(lambda g: g is not None, groups))
+
     elif action == 'end_module':
       # Finish any pending ports
       for i in param_items:
-        ports[i] = VerilogParameter(i, mode, ptype)
+        ports[i] = VerilogParameter(i, mode, ptype, range=range, size=size,
+                                    sign=sign, annotations=annotations)
 
       vobj = VerilogModule(name, ports.values(), generics, dict(sections), metacomments)
       objects.append(vobj)
