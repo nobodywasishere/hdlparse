@@ -7,7 +7,7 @@ import re
 
 '''Minimalistic lexer engine inspired by the PyPigments RegexLexer'''
 
-__version__ = '1.0.5'
+__version__ = '1.0.6'
 
 class MiniLexer(object):
   '''Simple lexer state machine with regex matching rules'''
@@ -84,4 +84,3 @@ class MiniLexer(object):
           pos += 1
         except IndexError:
           break
-
